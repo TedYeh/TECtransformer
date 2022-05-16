@@ -3,31 +3,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
+import math
 
 class Multi_Transformer(nn.Module):
 
     def __init__(self, in_dim, out_dim, batch_size, device, num_layers=5, dropout=0.3):
         super(Multi_Transformer, self).__init__()
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=in_dim, nhead=12, dropout=dropout, norm_first=True, batch_first=True, device=device)
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
-        self.decoder1 = nn.Linear(in_dim, out_dim, device=device)
-        self.decoder2 = nn.Linear(in_dim, out_dim, device=device)
-        self.decoder3 = nn.Linear(in_dim, out_dim, device=device)
-        self.decoder4 = nn.Linear(in_dim, out_dim, device=device)
+        hidden_dim = 256
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=16, dropout=dropout, norm_first=True, batch_first=True, device=device)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)        
+        self.input = nn.Linear(in_dim, hidden_dim, device=device)
+        self.decoder = nn.Linear(hidden_dim, out_dim, device=device)
+        
+        #self.omni = nn.Linear(hidden_dim, 1, device=device)
+        '''
+        self.omni = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim//2, device=device),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(hidden_dim//2, 1, device=device)
+        )
+        '''
         self.device = device
         self.batch_size = batch_size
         self.init_weights()
     
     def init_weights(self):
         initrange = 0.1
-        self.decoder1.bias.data.zero_()
-        self.decoder1.weight.data.uniform_(-initrange, initrange)
-        self.decoder2.bias.data.zero_()
-        self.decoder2.weight.data.uniform_(-initrange, initrange)
-        self.decoder3.bias.data.zero_()
-        self.decoder3.weight.data.uniform_(-initrange, initrange)
-        self.decoder4.bias.data.zero_()
-        self.decoder4.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
 
     def _generate_square_subsequent_mask(self, sz):
         mask = (torch.triu(torch.ones(sz, sz)==1).transpose(0, 1))
@@ -35,20 +39,21 @@ class Multi_Transformer(nn.Module):
         return mask
 
     def forward(self, tec):
-        mask = self._generate_square_subsequent_mask(tec.size(1)).to(self.device)
-        output = self.transformer_encoder(tec, mask)
-        output1 = F.relu(self.decoder1(output))
-        output2 = F.relu(self.decoder2(output))
-        output3 = F.relu(self.decoder3(output))
-        output4 = F.relu(self.decoder4(output))
-        return output1, output2, output3, output4
+        output = F.relu(self.input(tec))
+        mask = self._generate_square_subsequent_mask(output.size(1)).to(self.device)
+        output = self.transformer_encoder(output, mask)
+        tec_output = F.relu(self.decoder(output))
+        #omni_output = F.relu(self.omni(output))
+        return tec_output#, omni_output
 
-class Transformer(nn.Module):
+class Transformer_CNN(nn.Module):
 
     def __init__(self, in_dim, out_dim, batch_size, device, num_layers=5, dropout=0.3):
-        super(Transformer, self).__init__()
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=in_dim, nhead=12, dropout=dropout, norm_first=True, batch_first=True, device=device)
-        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
+        super(Transformer_CNN, self).__init__()
+        hidden_dim = 128
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=in_dim, nhead=8, dropout=dropout, norm_first=True, batch_first=True, device=device)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)        
+        self.input = nn.Conv2d(4, 1, kernel_size=(3, 3), padding='same', bias=True) 
         self.decoder = nn.Linear(in_dim, out_dim, device=device)
         self.device = device
         self.batch_size = batch_size
@@ -65,8 +70,57 @@ class Transformer(nn.Module):
         return mask
 
     def forward(self, tec):
-        mask = self._generate_square_subsequent_mask(tec.size(1)).to(self.device)
-        output = self.transformer_encoder(tec, mask)
+        output = self.input(tec)
+        output = F.relu(output.squeeze())
+        mask = self._generate_square_subsequent_mask(output.size(1)).to(self.device)
+        output = self.transformer_encoder(output, mask)
+        output = F.relu(self.decoder(output))
+        return output
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding, self).__init__()       
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        #pe.requires_grad = False
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        return x + self.pe[:x.size(0), :]
+
+class Transformer(nn.Module):
+    def __init__(self, in_dim, out_dim, batch_size, device, num_layers=5, dropout=0.3):
+        super(Transformer, self).__init__()
+        hidden_dim = 128
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=8, dropout=dropout, norm_first=True, batch_first=True, device=device)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)        
+        self.input = nn.Linear(in_dim, hidden_dim, device=device)
+        self.decoder = nn.Linear(hidden_dim, out_dim, device=device)
+        self.device = device
+        self.batch_size = batch_size
+        self.init_weights()
+    
+    def init_weights(self):
+        initrange = 0.1
+        self.decoder.bias.data.zero_()
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+        self.input.bias.data.zero_()
+        self.input.weight.data.uniform_(-initrange, initrange)
+
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)==1).transpose(0, 1))
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
+    def forward(self, tec):
+        output = self.input(tec)
+        mask = self._generate_square_subsequent_mask(output.size(1)).to(self.device)
+        output = self.transformer_encoder(output, mask)
         output = F.relu(self.decoder(output))
         return output
 
@@ -162,16 +216,20 @@ class TEC_CNNGRU(nn.Module):
 if __name__ == "__main__":
     from dataloader import TecDataset
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    tmp_model = Transformer(73*4, 73, 16, device)
+    tmp_model = Multi_Transformer(72*4+6, 72, 16, device)
     tmp_model = tmp_model.float().to(device)
-    tmpdata = TecDataset('txt/2020/CODG0500.20I', data_type='file', mode='test')
+    tmpdata = TecDataset('txt/valid_2020/', data_type='dir', pred_future=False, need_omni=True)
     tmpdataloader = DataLoader(tmpdata, batch_size = 16, shuffle = False)
-    in_map, tar_map, time = next(iter(tmpdataloader))
-    print(in_map.size())
-    in_map = in_map.to(device=device, dtype=torch.float)
-    output = tmp_model(in_map)
-    print(output.size())
+    batch = next(iter(tmpdataloader))
+    b_input, b_target = tuple(b.to(device) for b in batch[:2])
+    b_information = batch[3].to(device)
+    omni = batch[4].float().to(device)
+    tec_output, omni_output = tmp_model(torch.cat((b_input, b_information), 2))
+    print(b_input.size())
+    print(tec_output.size())
+    print(b_target.size(), omni.size())
     input()
     criterion = torch.nn.MSELoss()
-    #print(torch.sqrt(criterion(tmp_ae(in_map), tar_map.float().to(device))))
+    print(torch.sqrt(criterion(tec_output, b_target.float().to(device))))
+    print(torch.sqrt(criterion(omni_output, omni.float().to(device))))
 
