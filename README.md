@@ -5,7 +5,7 @@
 ### 指令注釋
 ` python main.py --epochs 需要的訓練代數 --batch_size 批次數 --train_path 訓練資料路徑 --use_model 使用模型`
 
-ex. 使用 Transformer 模型訓練40代，批次量32；並使用'txt/train'裡的資料進行訓練
+ex. 使用 Transformer 模型訓練40代，批次量32；並使用'txt/train'裡的資料進行訓練(此指令會同時進行模型評估)
 
 `python main.py --epochs 40 --batch_size 32 --train_path txt/train --use_model Transformer`
 
