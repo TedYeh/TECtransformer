@@ -3,10 +3,12 @@ import numpy as np
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import geopandas
 from matplotlib import cm
 import pandas as pd
 import datetime
 import imageio, re
+import seaborn as sn
 from helper import plot_tec_pred
 
 def plot_init():
@@ -16,36 +18,42 @@ def plot_init():
     #plt.xlim(-180, 180)
     #plt.ylim(-87.5, 87.5)
 
-def plot(np_data, points=None, datetime=[0,0,0,0], type_='Code GIM', use_model=''):
-    
-    if type_=='GIM-Pred':
-        cmap = plt.cm.get_cmap('RdBu')
-    else:cmap = plt.cm.get_cmap('jet')       
+def plot(np_data, points=None, rmse=0, datetime=[0,0,0,0], type_='Code GIM', use_model=''):
+    plt.figure(figsize=(16, 8))
+    plt.rcParams.update({'font.size': 22})
+    world = geopandas.read_file(geopandas.datasets.get_path('naturalearth_lowres'))
+    world.boundary.plot(figsize=(16, 8), edgecolor='black')
+    if type_=='Difference':
+        #cmap = plt.cm.get_cmap('jet') 
+        #cmap = plt.cm.get_cmap('binary')   
+        #cmap = plt.cm.get_cmap('RdBu') 
+        cmap = plt.cm.get_cmap('Oranges')   
+    else:
+        cmap = plt.cm.get_cmap('jet') 
 
     date_format = f'{datetime[0]}-{datetime[1]:02d}-{datetime[2]:02d} {datetime[3]:02d}'
-    plt.title(f"GLOBAL IONOSPHERE MAPS\n{date_format}:00 UT\n{use_model} {type_}")    
+    if type_=='Difference':plt.title(f"GLOBAL IONOSPHERE MAPS\n{date_format}:00 UT\n{use_model} {type_} rmse = {rmse:02.3f}") 
+    else:plt.title(f"GLOBAL IONOSPHERE MAPS\n{date_format}:00 UT\n{use_model} {type_}")    
      
     if points:
         for i in range(len(points[0])):plt.scatter(points[0][i][0], points[0][i][1], marker='o', color='m', label='diff_max'if i==0 else'')
         for i in range(len(points[1])):plt.scatter(points[1][i][0], points[1][i][1], marker='o', color='w', label='diff_min'if i==0 else'')        
         plt.legend(loc='upper right')
     
-    if type_ == 'GIM-Pred':
-        #im = plt.imshow(np_data, cmap = cmap)
-        im = plt.imshow(np_data, extent=[-180, 180, -87.5, 87.5], cmap = cmap)
-        norm = mpl.colors.BoundaryNorm(list(range(-25,30,5)), cmap.N)#norm = mpl.colors.Normalize(vmin=-30, vmax=30)
-    else:
-        im = plt.imshow(np_data, cmap = cmap)
-        #if points:im = plt.imshow(np_data, cmap = cmap)
-        #else:im = plt.imshow(np_data, extent=[-180, 180, -87.5, 87.5], cmap = cmap)
-        norm = mpl.colors.BoundaryNorm(list(range(0,400,50)), cmap.N)#norm = mpl.colors.Normalize(vmin=0, vmax=350)   
+    
+    im = plt.imshow(np_data, extent=[-180, 180, -87.5, 87.5], cmap = cmap)
+    #if points:im = plt.imshow(np_data, cmap = cmap)
+    #else:im = plt.imshow(np_data, extent=[-180, 180, -87.5, 87.5], cmap = cmap)
+    #norm = mpl.colors.BoundaryNorm(list(range(0,400,50)), cmap.N)
+    norm = mpl.colors.Normalize(vmin=0, vmax=350)   
     if points:plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap))
-    else:plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.65)
+    else:plt.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=cmap), shrink=0.8)
     #plt.colorbar(im, shrink=0.65)
     plt.xlabel('GEOGRAPHIC LONGITUDE')
     plt.ylabel('GEOGRAPHIC LATITUDE')
-    if type_ == 'Code GIM':plt.savefig(f'img/real/{date_format}.png')
-    elif type_ == 'GIM-Pred':plt.savefig(f'img/GIM-Pred/{date_format}.png')
+    if type_ == 'Target':plt.savefig(f'img/real/{date_format}.png')
+    elif type_=='Input':plt.savefig(f'img/input/{date_format}.png')
+    elif type_ == 'Difference':plt.savefig(f'img/difference/{date_format}.png')
     else:plt.savefig(f'img/pred/{date_format}.png')
     
     plt.close('all')
@@ -84,11 +92,14 @@ def read_one_day_omni(all_omni, DOY, hour):
     data = list(omni_data[3:])
     return [data[2], data[4], data[0], data[3], data[1], np.nan]
 
+OMNI_2019 = pd.read_csv('omni/2019hourly.csv')
+OMNI_2020 = pd.read_csv('omni/2020hourly.csv')
+OMNI_2021 = pd.read_csv('omni/2021hourly.csv')
 def read_file(filename, map_type='TEC'):
     with open(filename, 'r') as code:
         str_list = []
         tec_for_hour = []
-        times = []
+        times, omnis = [], []
         LAT, latitudes = [], []
         n, nn = 1, 0
         while True:
@@ -96,8 +107,16 @@ def read_file(filename, map_type='TEC'):
             n += 1
             if not line:break 
             if 'EPOCH OF CURRENT MAP' in line: #record date & time of TEC
-                time_data = [int(d) for d in line.split()[:4]]
-                times.append(time_data)
+                y, m, d, h = [int(d) for d in line.split()[:4]]
+                DOY = int(datetime.datetime.strptime(f'{y}-{m}-{d}', '%Y-%m-%d').strftime('%j'))
+                if y == 2019:omni = read_one_day_omni(OMNI_2019, DOY, h)
+                elif y == 2020:omni = read_one_day_omni(OMNI_2020, DOY, h)
+                elif y == 2021:omni = read_one_day_omni(OMNI_2021, DOY, h)
+                else: omni = []
+                omnis.append(omni)
+                #print([y, m, d, h], DOY, omni)
+                
+                times.append([y, m, d, h])
                 
             if 'LAT/LON1/LON2/DLON/H' in line: #record TEC
                 tec_data = []
@@ -116,7 +135,7 @@ def read_file(filename, map_type='TEC'):
                 LAT.append(latitudes)
                 tec_for_hour, latitudes = [], []
         #print(np.array(str_list)[0])
-        if map_type=='TEC': return str_list[:24], times[:24]#, LAT[:25]
+        if map_type=='TEC': return str_list[:24], times[:24], omnis[:24]#, LAT[:25]
         else: return str_list[25:-1], times[25:-1]
 
 def get_rms(rms_map, gim):
@@ -189,24 +208,67 @@ def plot_tec_rms(target, rms, rms_, omni, DOY, datetimes=[0,0,0,0]):
     plt.savefig(f'img/observation/{DOY}->{date_format}.png')
     plt.close('all')
 
+def plot_matrix(tec_map):
+    matrix = sn.heatmap(tec_map, square=True)#cmap='binary'
+    plt.tight_layout() 
+    matrix.get_figure().savefig("img/line_chart/matrix.png") 
+
+def get_scatter(data):
+    #plt.style.use("ggplot")
+    p = sn.color_palette("flare", as_cmap=True)
+    scatter = sn.scatterplot(data = data, x='x', y='y', hue='DOY', size='DOY',sizes=(5, 5), palette=p) #, hue=[(60. + i) for i in range]
+    scatter.set_xlabel("North Pole")
+    scatter.set_ylabel("Sourth Pole")
+    scatter.get_figure().savefig("img/line_chart/scatter.png") 
+
+
 if __name__ == "__main__":
     # read_one_day_omni(all_omni, DOY, hour)
+    #x, y = [], []
+    days = []
+    data = {'x':[], 'y':[], 'DOY':[]}
     omni_path = 'omni/2020hourly.csv'    
     all_omni = pd.read_csv(omni_path)
-    file_list = os.listdir('txt/test_2020')
+    file_list = os.listdir('txt/2020')
     for file_name in file_list:
-        rms_data, date_rms = read_file('txt/test_2020/'+file_name, 'RMS')
-        tec_data, date_tec = read_file('txt/test_2020/'+file_name, 'TEC')
+        x, y = [], []
+        rms_data, date_rms = read_file('txt/2020/'+file_name, 'RMS')
+        tec_data, date_tec, omnis = read_file('txt/2020/'+file_name, 'TEC')
         rms_data, date_rms = np.array(rms_data), np.array(date_rms)
-        tec_data, date_tec = np.array(tec_data), np.array(date_tec)
+        tec_data, date_tec, omnis = np.array(tec_data), np.array(date_tec), np.array(omnis)
+        print(omnis.shape)
+        input()
         for idx in range(len(rms_data)):
-            print(date_rms[idx], date_tec[idx])
-            m, d, h = date_rms[idx][1:]
-            DOY, hour = int(datetime.datetime.strptime(f'{m}-{d}', '%m-%d').strftime('%j'))+1, int(h)
-            omni = read_one_day_omni(all_omni, DOY, hour)
+            
+            plot(rms_data[idx], points=None, datetime=date_rms[idx][:], type_='GIM RMS', use_model='')
+            input()
+            '''
+            n_pole = np.mean(tec_data[idx][:11], axis=1)
+            s_pole = np.mean(np.flip(tec_data[idx][60:]), axis=1)
+            #print(n_pole.dot([]))
+            n_pole_w = n_pole * np.cos(np.pi * (np.arange(87.5, 60, -2.5, dtype=float)/180))
+            s_pole_w = s_pole * np.cos(np.pi * (np.arange(-87.5, -60, 2.5, dtype=float)/180))
+            
+            data['x'] += n_pole.tolist()
+            data['y'] += s_pole.tolist()
+            #plot_matrix(tec_data[idx])
+            
+            y, m, d, h = date_rms[idx][:]
+            DOY, hour = int(datetime.datetime.strptime(f'{y}-{m}-{d}', '%Y-%m-%d').strftime('%j'))+1, int(h)
+            days.append(DOY)
+            #omni = read_one_day_omni(all_omni, DOY, hour)
             rms_ = get_rms(rms_data[idx], tec_data[idx])
-            plot_tec_rms(tec_data[idx], rms_data[idx], rms_, omni, DOY, date_rms[idx])
-            #input()
+            data['DOY'] += [DOY for _ in range(11)]
+            #plot_tec_rms(tec_data[idx], rms_data[idx], rms_, omni, DOY, date_rms[idx])
+                      
+            #x, y = np.array(x), np.array(y)
+
+            #print(x.shape, y.shape, days)
+        print(data['DOY'] )
+        input()
+    get_scatter(data) 
+    '''
+        
     '''
     array = read_omni('omni/2019.lst')
     print(array[:, 3:7])

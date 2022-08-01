@@ -37,21 +37,9 @@ def evaluation(dataloader, model, device, use_model='Transformer_CNN'):
         b_input, b_target = tuple(b.to(device) for b in batch[:2])
         b_information = batch[3].to(device)
         output = model(torch.cat((b_input, b_information), 2))
+        #output = model(b_input)
         loss = torch.sqrt(mse(output, b_target))
-        #loss = torch.sqrt(mse(output[3], b_target[:, 3, :, :]))
-        val_loss += loss.detach().item()
-    return val_loss / len(dataloader)
-
-def evaluation_for_dis(dataloader, model, device):
-    model.eval()    
-    val_loss = 0
-    mse = torch.nn.MSELoss()
-    for step, batch in enumerate(dataloader):
-        b_input, b_target = tuple(b.to(device) for b in batch[:2])
-        b_information = batch[3].to(device)
-        omni = batch[4].float().to(device)
-        output = model(torch.cat((b_input, b_information), 2))
-        loss = torch.sqrt(mse(output, b_target))
+        #loss = mse(output, b_target)
         #loss = torch.sqrt(mse(output[3], b_target[:, 3, :, :]))
         val_loss += loss.detach().item()
     return val_loss / len(dataloader)
@@ -133,16 +121,20 @@ def train(dataloader, valid_dataloader, in_dim, out_dim, batch_size, EPOCH, path
             if use_model == 'CNNGRU':
                 output = model(b_input.unsqueeze(1))
             elif use_model == 'Multi_Transformer':
+                output = model(b_input)
+                #output = model(torch.cat((b_input, b_information), 2))
+            else: #output = model(torch.cat((b_input, b_information), 2))
                 #output = model(b_input)
                 output = model(torch.cat((b_input, b_information), 2))
-            else: output = model(torch.cat((b_input, b_information), 2))
             # MAPE loss function
             #loss = MAELoss(tec_output, b_target)
             # RMSE loss function
-            loss = torch.sqrt(mse(output, b_target))            
+             
+            loss = torch.sqrt(mse(output, b_target))        
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            
             train_loss += loss.detach().item()
         
         if train_loss < min_train_loss:
