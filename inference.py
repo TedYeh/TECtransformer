@@ -220,7 +220,7 @@ def inference(path_save_model, in_dim, out_dim, best_model, dataloader, device, 
     plot_average_local_bar(monthly_tec_loacl, pred_tec_loacl, month, map_points, y, use_model)
     plot_error_dist(error_list, y, use_model)
     plot_error_dist_local(error_list_local, y, use_model)
-    input()
+    #input()
     tec_dict['dates'], tec_dict['rmse'] = dates, rmse_list
     pd.DataFrame.from_dict(tec_dict).to_csv('rmse_result.csv', index=False)
     plt.close('all')           
@@ -319,7 +319,7 @@ if __name__ == '__main__':
     #tmpdata = TecDataset('txt/2020/CODG0500.20I', data_type='file', mode='test')
     #tmpdata = TecDataset('txt/monthly_testdata/', data_type='dir', mode='test')
     
-    tmpdata = TecDataset('txt/2021/', data_type='dir', mode='test', window_size=window_sz, to_sequence=False)
+    tmpdata = TecDataset('txt/2020/', data_type='dir', mode='test', window_size=window_sz, to_sequence=False)
     tmpdataloader = DataLoader(tmpdata, batch_size = 1, shuffle = False)
     inference('save_model/', in_dim, out_dim, 'best_train_43_Transformer.pth', tmpdataloader, device, 'Transformer')
     #inference_four_hour('save_model/', in_dim, out_dim, 'best_train_44_Transformer.pth', tmpdataloader, device, 'Transformer')

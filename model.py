@@ -3,26 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
-from convlstm import ConvLSTM
 import math
-
-class ConvLSTM_Encoder(nn.Module):
-    def __init__(self, in_dim=72, out_dim=72, batch_size=16, device='cpu', channels=1, num_layers=3, dropout=0.3):
-        super(ConvLSTM_Encoder, self).__init__()
-        self.encoder_l1 = ConvLSTM(input_dim=channels,
-                 hidden_dim=[64, 64, 64],
-                 kernel_size=(5, 5),
-                 num_layers=num_layers,
-                 batch_first=True,
-                 bias=True,
-                 return_all_layers=False)
-        self.bn = nn.BatchNorm3d(64)
-        self.decoder = nn.Conv3d(64, channels, kernel_size=3, padding='same')
-
-    def forward(self, tec):
-        output, _ = self.encoder_l1(tec)        
-        output = torch.sigmoid(self.decoder(F.relu(output[-1]).permute(0, 2, 1, 3, 4))) #torch.sigmoid(self.decoder(output))
-        return output.permute(0, 2, 1, 3, 4)#
 
 class Multi_Transformer(nn.Module):
 

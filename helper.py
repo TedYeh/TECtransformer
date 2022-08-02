@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 import seaborn as sn
 import pandas as pd
 import datetime
-from model import ConvLSTM_Encoder, TEC_LSTM, TEC_GRU, TEC_CNNGRU, Transformer, Multi_Transformer
+from model import TEC_LSTM, TEC_GRU, TEC_CNNGRU, Transformer, Multi_Transformer
 
-models = {'ConvLSTM_Encoder':ConvLSTM_Encoder, 'LSTM':TEC_LSTM, 'GRU':TEC_GRU, 'CNNGRU':TEC_CNNGRU, 'Transformer':Transformer, "Multi_Transformer":Multi_Transformer}
+models = {'LSTM':TEC_LSTM, 'GRU':TEC_GRU, 'CNNGRU':TEC_CNNGRU, 'Transformer':Transformer, "Multi_Transformer":Multi_Transformer}
 # save train or validation loss
 def log_loss(loss_val : float, path_to_save_loss : str, train : bool = True):
     if train:
