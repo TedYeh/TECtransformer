@@ -1,4 +1,6 @@
 # TEC_prediction
+Using a Transformer-base model to predict global TEC(Total Electron Content), and train the model with the concentration of GIM over the past three years. 
+使用Transformer模型在全球電離層預測
 <div align="center"><img src="gif/2021-02-19_Transformer.gif" alt="Transformer" width="50%"/></div>
 
 ## 訓練
